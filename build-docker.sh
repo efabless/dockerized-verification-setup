@@ -16,4 +16,4 @@
 
 mkdir -p logs/docker
 echo "dir created"
-docker build --rm -t dv_setup:latest . | tee logs/docker/dv_setup.build.txt
+docker build --rm -t efabless/dv_setup:latest . | tee logs/docker/dv_setup.build.txt
