@@ -13,45 +13,32 @@
 # limitations under the License.
 # SPDX-License-Identifier: Apache-2.0
 
-# syntax = docker/dockerfile:1.0-experimental
-FROM ubuntu:20.04 AS build
+FROM ubuntu:20.04
 
+ENV CC=/usr/bin/gcc
+ENV CPP=/usr/bin/cpp
+ENV CXX=/usr/bin/g++
 
-ENV CC=/usr/bin/gcc \
-    CPP=/usr/bin/cpp \
-    CXX=/usr/bin/g++
+ENV TOOLCHAIN_DOWNLOAD_DIR=/tmp/riscv-gnu-toolchain
+ENV TOOLCHAIN_INSTALL_DIR=/opt/riscv32i
 
-RUN apt update
+ARG DEBIAN_FRONTEND=noninteractive
 
-# General Utils
-RUN DEBIAN_FRONTEND="noninteractive" apt-get -y install tzdata
+COPY ./apt_requirements.txt /tmp
 
-RUN apt install -y automake autotools-dev bison cmake flex g++ gcc git libpcre3 libpcre3-dev tcl tcl-dev wget zlib1g zlib1g-dev
+RUN apt-get update && \
+    apt-get install -y $(grep -v "^#" /tmp/apt_requirements.txt | tr "\n" " ")
 
-# Dependencies 
-RUN apt-get install -y apt-utils autoconf automake autotools-dev curl libmpc-dev \
-        libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo \
-    gperf libtool patchutils bc zlib1g-dev git libexpat1-dev
+RUN git clone https://github.com/riscv/riscv-gnu-toolchain ${TOOLCHAIN_DOWNLOAD_DIR} && \
+    cd ${TOOLCHAIN_DOWNLOAD_DIR} && \
+    ./configure --prefix=${TOOLCHAIN_INSTALL_DIR} --with-arch=rv32i && \
+    make -j $(nproc) && \
+    cd / && \
+    rm -rf ${TOOLCHAIN_DOWNLOAD_DIR}
 
-
-# Iverilog
-RUN apt-get install -y iverilog
-
-# build
-RUN mkdir /opt/riscv32i && \
-    git clone https://github.com/riscv/riscv-gnu-toolchain riscv-gnu-toolchain-rv32i && \
-    cd riscv-gnu-toolchain-rv32i && \
-    git checkout 411d134 && \
-    git submodule update --init --recursive && \
-    mkdir build; cd build && \
-    ../configure --with-arch=rv32i --prefix=/opt/riscv32i && \
-    make -j$(nproc)
-
-ENV GCC_PATH=/opt/riscv32i/bin
+ENV PATH=${TOOLCHAIN_INSTALL_DIR}/bin:${PATH}
+ENV GCC_PATH=${TOOLCHAIN_INSTALL_DIR}/bin
 ENV DV_ROOT=/dv_root
-
-RUN apt install -y vim
-
-WORKDIR $DV_ROOT
+WORKDIR ${DV_ROOT}
 
 CMD /bin/bash
