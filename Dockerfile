@@ -14,44 +14,58 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # syntax = docker/dockerfile:1.0-experimental
-FROM ubuntu:20.04 AS build
+FROM ubuntu:20.04 AS base
 
+RUN apt update
+
+RUN DEBIAN_FRONTEND="noninteractive" apt-get -y install tzdata
+
+RUN apt-get install -y apt-utils autoconf automake autotools-dev curl libmpc-dev \
+    libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo \
+    gperf libtool patchutils bc zlib1g-dev git libexpat1-dev libpcre3-dev tcl-dev \
+    neovim
 
 ENV CC=/usr/bin/gcc \
     CPP=/usr/bin/cpp \
     CXX=/usr/bin/g++
 
-RUN apt update
+# ---
+FROM base AS rv-builder
 
-# General Utils
-RUN DEBIAN_FRONTEND="noninteractive" apt-get -y install tzdata
-
-RUN apt install -y automake autotools-dev bison cmake flex g++ gcc git libpcre3 libpcre3-dev tcl tcl-dev wget zlib1g zlib1g-dev
-
-# Dependencies 
-RUN apt-get install -y apt-utils autoconf automake autotools-dev curl libmpc-dev \
-        libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo \
-    gperf libtool patchutils bc zlib1g-dev git libexpat1-dev
-
-
-# Iverilog
-RUN apt-get install -y iverilog
-
-# build
+# Get RISCV
 RUN mkdir /opt/riscv32i && \
     git clone https://github.com/riscv/riscv-gnu-toolchain riscv-gnu-toolchain-rv32i && \
     cd riscv-gnu-toolchain-rv32i && \
     git checkout 411d134 && \
-    git submodule update --init --recursive && \
-    mkdir build; cd build && \
+    git submodule update --init --recursive --depth=1 && \
+    mkdir build && \
+    cd build && \
     ../configure --with-arch=rv32i --prefix=/opt/riscv32i && \
     make -j$(nproc)
 
+
+# ---
+FROM base
+
+# Get IcarusVerilog
+
+# WORKDIR /iverilog
+# RUN curl -L https://github.com/steveicarus/iverilog/archive/refs/tags/v10_3.tar.gz | tar --strip-components=1 -xzC /iverilog &&\
+#     sh autoconf.sh &&\
+#     ./configure &&\
+#     make -j$(nproc) &&\
+#     make install &&\
+#     rm -rf *
+
+RUN apt-get install -y iverilog
+
+# Get ARM Cross-Compiler
+RUN apt-get install -y gcc-arm-none-eabi
+
+# Get RISC-V Cross-Compiler
+COPY --from=rv-builder /opt/riscv32i/bin /opt/riscv32i/bin
+
 ENV GCC_PATH=/opt/riscv32i/bin
 ENV DV_ROOT=/dv_root
-
-RUN apt install -y vim
-
 WORKDIR $DV_ROOT
-
 CMD /bin/bash
